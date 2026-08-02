@@ -180,6 +180,37 @@ export function formatSetRatio(tally) {
   return total === 0 ? '—' : Math.round(setRatio(tally) * 100) + '%'
 }
 
+/**
+ * Rounds a team should show an extra "bye" row for, beyond its recorded byes:
+ * completed rounds where the team has NEITHER a match NOR a recorded bye — e.g.
+ * they joined the grade late, or a round wasn't scheduled for them manually.
+ * `rounds` is the league's rounds (each needs `round_number` + `status`);
+ * `playedRoundNumbers` / `byeRoundNumbers` are Sets of round_numbers the team
+ * already has a match / recorded bye in. Both these and recorded byes render
+ * identically as a "Bye" row — see the public embed and the app history tables.
+ */
+export function findGapRounds(rounds, playedRoundNumbers, byeRoundNumbers) {
+  return (rounds || []).filter(r =>
+    r.status === 'completed' &&
+    !playedRoundNumbers.has(r.round_number) &&
+    !byeRoundNumbers.has(r.round_number)
+  )
+}
+
+/**
+ * Sum of manual ladder adjustments for a team (from the ladder_adjustments
+ * table / public_ladder_adjustments view). Signed: positive gives points,
+ * negative removes them. Adjustments touch LADDER POINTS ONLY — never
+ * wins/losses/sets/games — so this is added on top of a computed tally's
+ * `points` at each standings call site, keeping the app and the public embed
+ * identical. Returns 0 when a team has no adjustments.
+ */
+export function sumAdjustments(adjustments, teamId) {
+  return (adjustments || [])
+    .filter(a => a.team_id === teamId)
+    .reduce((sum, a) => sum + (a.points || 0), 0)
+}
+
 /** True when a tally has any carried-over history (used to badge the ladder). */
 export function hasCarriedRecord(enrolment) {
   return !!enrolment && (
