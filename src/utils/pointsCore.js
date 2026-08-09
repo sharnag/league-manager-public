@@ -198,17 +198,47 @@ export function findGapRounds(rounds, playedRoundNumbers, byeRoundNumbers) {
 }
 
 /**
- * Sum of manual ladder adjustments for a team (from the ladder_adjustments
- * table / public_ladder_adjustments view). Signed: positive gives points,
- * negative removes them. Adjustments touch LADDER POINTS ONLY — never
- * wins/losses/sets/games — so this is added on top of a computed tally's
- * `points` at each standings call site, keeping the app and the public embed
- * identical. Returns 0 when a team has no adjustments.
+ * Combined deltas from a team's manual ladder adjustments (the
+ * ladder_adjustments table / public_ladder_adjustments view). Each adjustment
+ * carries a signed `points` change plus optional match-record deltas — a played
+ * game with a Win/Draw/Loss result and sets. Returned in the tally's camelCase
+ * shape. Returns all-zeros when a team has no adjustments. DB columns are
+ * snake_case (sets_for/sets_against); the rest match the tally names.
  */
-export function sumAdjustments(adjustments, teamId) {
-  return (adjustments || [])
-    .filter(a => a.team_id === teamId)
-    .reduce((sum, a) => sum + (a.points || 0), 0)
+export function adjustmentTally(adjustments, teamId) {
+  const d = { played: 0, wins: 0, draws: 0, losses: 0, setsFor: 0, setsAgainst: 0, points: 0 }
+  for (const a of adjustments || []) {
+    if (a.team_id !== teamId) continue
+    d.played += a.played || 0
+    d.wins += a.wins || 0
+    d.draws += a.draws || 0
+    d.losses += a.losses || 0
+    d.setsFor += a.sets_for || 0
+    d.setsAgainst += a.sets_against || 0
+    d.points += a.points || 0
+  }
+  return d
+}
+
+/**
+ * A computed tally with a team's manual adjustments folded in. Adjustments add
+ * on top of match-derived values, so P/W/D/L/Pts/SF/SA all reflect them and
+ * setRatio() recomputes from the merged sets. forfeitsAgainst is left untouched
+ * (adjustments never model forfeits). Used at every standings call site so the
+ * app and the public embed stay identical.
+ */
+export function withAdjustments(tally, adjustments, teamId) {
+  const d = adjustmentTally(adjustments, teamId)
+  return {
+    ...tally,
+    played: tally.played + d.played,
+    wins: tally.wins + d.wins,
+    draws: tally.draws + d.draws,
+    losses: tally.losses + d.losses,
+    setsFor: tally.setsFor + d.setsFor,
+    setsAgainst: tally.setsAgainst + d.setsAgainst,
+    points: tally.points + d.points,
+  }
 }
 
 /** True when a tally has any carried-over history (used to badge the ladder). */
