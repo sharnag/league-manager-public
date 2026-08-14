@@ -110,6 +110,38 @@ export function emptyTally() {
   }
 }
 
+/** Field-wise sum of two tallies. Missing fields count as 0, so a partial
+ *  delta (e.g. adjustmentTally, which has no forfeitsAgainst) can be added to a
+ *  full tally without losing the other side's value. */
+export function addTally(a, b) {
+  const x = a || {}, y = b || {}
+  return {
+    played: (x.played || 0) + (y.played || 0),
+    wins: (x.wins || 0) + (y.wins || 0),
+    draws: (x.draws || 0) + (y.draws || 0),
+    losses: (x.losses || 0) + (y.losses || 0),
+    forfeitsAgainst: (x.forfeitsAgainst || 0) + (y.forfeitsAgainst || 0),
+    points: (x.points || 0) + (y.points || 0),
+    setsFor: (x.setsFor || 0) + (y.setsFor || 0),
+    setsAgainst: (x.setsAgainst || 0) + (y.setsAgainst || 0),
+  }
+}
+
+/** Field-wise difference of two tallies (a − b). See addTally for field rules. */
+export function subtractTally(a, b) {
+  const x = a || {}, y = b || {}
+  return {
+    played: (x.played || 0) - (y.played || 0),
+    wins: (x.wins || 0) - (y.wins || 0),
+    draws: (x.draws || 0) - (y.draws || 0),
+    losses: (x.losses || 0) - (y.losses || 0),
+    forfeitsAgainst: (x.forfeitsAgainst || 0) - (y.forfeitsAgainst || 0),
+    points: (x.points || 0) - (y.points || 0),
+    setsFor: (x.setsFor || 0) - (y.setsFor || 0),
+    setsAgainst: (x.setsAgainst || 0) - (y.setsAgainst || 0),
+  }
+}
+
 /**
  * Tally a team's completed/forfeited matches into a standings record. Pass a
  * `seed` (e.g. carriedTally(enrolment)) to start from carried-over values; the
@@ -239,6 +271,48 @@ export function withAdjustments(tally, adjustments, teamId) {
     setsAgainst: tally.setsAgainst + d.setsAgainst,
     points: tally.points + d.points,
   }
+}
+
+/**
+ * Everything already VISIBLE for a team in one grade — its raw match results
+ * plus that grade's manual adjustments — excluding anything carried in. This is
+ * the quantity the standings would show if the enrolment's carried_* were zero,
+ * and it is the unit the transfer carry-over arithmetic is built from.
+ */
+export function visibleTally(matches, adjustments, teamId, noShowPenalty = DEFAULT_NO_SHOW_PENALTY) {
+  return addTally(
+    tallyMatches(matches, teamId, noShowPenalty),
+    adjustmentTally(adjustments, teamId)
+  )
+}
+
+/**
+ * The carried_* snapshot to write when transferring a team into a destination
+ * grade. Upholds the invariant every standings call site depends on:
+ *
+ *     carried(E) = total season record − what's already visible in E's grade
+ *
+ * where the total is the source enrolment's own carried record (everything it
+ * inherited) plus what's visible in the source grade. Because carried_* is
+ * itself part of that sum, the definition is inductive: it stays correct over
+ * any number of hops (A→B→C→…), and subtracting the destination's own visible
+ * record makes returning to a previously-played grade (A→B→A) non-duplicating.
+ * Order of hops never matters — the total is a union over grades, not a path.
+ *
+ * Pass the source enrolment row, and both grades' matches + adjustments.
+ */
+export function transferCarryTally({
+  sourceEnrolment, sourceMatches, sourceAdjustments,
+  destMatches, destAdjustments, teamId, noShowPenalty = DEFAULT_NO_SHOW_PENALTY,
+}) {
+  const total = addTally(
+    carriedTally(sourceEnrolment),
+    visibleTally(sourceMatches, sourceAdjustments, teamId, noShowPenalty)
+  )
+  return subtractTally(
+    total,
+    visibleTally(destMatches, destAdjustments, teamId, noShowPenalty)
+  )
 }
 
 /** True when a tally has any carried-over history (used to badge the ladder). */
