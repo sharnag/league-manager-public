@@ -1,8 +1,10 @@
 /**
  * Points / standings derivation — single source of truth.
  *
- * Win (3-0, 2-1, 2-0) → winner: 4, loser: 1
- * Draw (1-1)          → both: 2
+ * Win (3-0, 2-0, 1-0)   → winner: 4, loser: 1
+ * Win, loser took a set
+ * (2-1)                 → winner: 4, loser: 2
+ * Draw (1-1)            → both: 2
  * Forfeit             → winner: 4 (sets 3), forfeiting team: 0 (sets 0)
  * Forfeit (no show)   → winner: 4 (sets 3), no-show team: configurable penalty (sets 0), default -4
  * Double forfeit      → each team scored independently (0, or the no-show penalty), sets 0-0
@@ -83,7 +85,7 @@ export function derivePoints(match, teamId, noShowPenalty = DEFAULT_NO_SHOW_PENA
 
   if (mySets === theirSets) return 2 // draw
   if (mySets > theirSets) return 4  // win
-  return 1                           // loss
+  return mySets > 0 ? 2 : 1          // loss: won a set vs shutout
 }
 
 export function deriveOutcome(match, teamId) {
@@ -172,7 +174,7 @@ export function tallyMatches(matches, teamId, noShowPenalty = DEFAULT_NO_SHOW_PE
     t.setsAgainst += theirSets
     if (mySets > theirSets) { t.wins++; t.points += 4 }
     else if (mySets === theirSets) { t.draws++; t.points += 2 }
-    else { t.losses++; t.points += 1 }
+    else { t.losses++; t.points += mySets > 0 ? 2 : 1 }
   }
   return t
 }
